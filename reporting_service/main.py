@@ -1,25 +1,58 @@
-from fastapi import FastAPI, Depends
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from database import lifespan, get_db
+from fastapi import FastAPI, HTTPException, status
+from models import StatsResponse
+from config import BLOG_SERVICE_URL
+import httpx
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Reporting & Analytics Service", lifespan=lifespan)
 
-@app.get("/reports/summary", summary="Общая сводка по блогу")
-async def get_summary(db: AsyncIOMotorDatabase = Depends(get_db)):
-    total_posts = await db["posts"].count_documents({})
-    total_users = await db["users"].count_documents({})
-    return {
-        "total_posts": total_posts,
-        "total_users": total_users
-    }
+app = FastAPI(title="Reporting Service")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://blog_service:8000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/reports/authors-stats", summary="Статистика активности авторов")
-async def get_authors_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
-    # MongoDB Aggregation Pipeline для подсчета количества публикаций по каждому автору
-    pipeline = [
-        {"$group": {"_id": "$author_username", "posts_count": {"$sum": 1}}},
-        {"$sort": {"posts_count": -1}},
-        {"$project": {"author": "$_id", "posts_count": 1, "_id": 0}}
-    ]
-    cursor = db["posts"].aggregate(pipeline)
-    return await cursor.to_list(length=100)
+
+@app.get("/api/stats", response_model=StatsResponse, summary="Получить статистику по постам и комментариям")
+async def get_stats():
+    total_posts = 0
+    total_comments = 0
+    skip = 0
+    batch_size = 50
+
+    async with httpx.AsyncClient(base_url=BLOG_SERVICE_URL, timeout=10.0) as client:
+        while True:
+            try:
+                response = await client.get("/api/posts", params={"skip": skip, "limit": batch_size})
+            except httpx.RequestError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Ошибка соединения с основным сервисом: {exc}"
+                )
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Основной сервис вернул ошибку: {response.status_code}"
+                )
+            posts = response.json()
+            if not posts:
+                break
+
+            total_posts += len(posts)
+            for post in posts:
+                comments = post.get("comments")
+                total_comments += len(comments)
+
+            if len(posts) < batch_size:
+                break
+
+            skip += batch_size
+    return StatsResponse(
+        total_posts=total_posts,
+        total_comments=total_comments
+    )
