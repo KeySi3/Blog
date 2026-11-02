@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Личный кабинет</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f9fafb; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .box { background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; }
+        button { padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <a href="/" style="display:inline-block; margin-bottom: 15px; text-decoration:none; color: #2563eb;">← На главную</a>
+
+    <div class="box">
+        <h2 style="margin-top:0;">Написать новый пост</h2>
+        <form id="newPostForm">
+            <input type="text" id="title" placeholder="Заголовок поста" required>
+            <input type="text" id="tags" placeholder="Теги через запятую (например: python, mongodb, backend)">
+            <textarea id="content" rows="5" placeholder="Текст статьи..." required></textarea>
+            <button type="submit">Опубликовать</button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h3>Мои посты</h3>
+        <div id="myPostsList">Загрузка...</div>
+    </div>
+</div>
+
+<script>
+    const authData = JSON.parse(localStorage.getItem('blog_user') || 'null');
+    if (!authData || !authData.username) {
+        window.location.href = '/login';
+        throw new Error('Требуется авторизация');
+    }
+
+    async function loadMyPosts() {
+        const list = document.getElementById('myPostsList');
+        try {
+            const res = await fetch(`/api/posts?author=${encodeURIComponent(authData.username)}`);
+            if (!res.ok) {
+                list.innerHTML = '<p style="color: red;">Ошибка при загрузке постов.</p>';
+                return;
+            }
+
+            const posts = await res.json();
+            if (!Array.isArray(posts) || posts.length === 0) {
+                list.innerHTML = '<p>У вас еще нет опубликованных постов.</p>';
+                return;
+            }
+
+            list.innerHTML = posts.map(p => {
+                const id = p.id || p._id;
+                return `
+                    <div style="border-bottom: 1px solid #e5e7eb; padding: 10px 0;">
+                        <a href="/posts/view/${id}" style="font-weight: 600; color: #1f2937; text-decoration: none;">${p.title}</a>
+                        <div style="font-size: 12px; color: #6b7280;">Опубликовано: ${new Date(p.created_at).toLocaleString()} | Комментариев: ${p.comments ? p.comments.length : 0}</div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error(err);
+            list.innerHTML = '<p style="color: red;">Сетевая ошибка при загрузке постов.</p>';
+        }
+    }
+
+    document.getElementById('newPostForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const rawTags = document.getElementById('tags').value.split(',').map(t => t.trim()).filter(Boolean);
+
+        const res = await fetch('/api/posts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: authData.username,
+                password: authData.password,
+                title: document.getElementById('title').value,
+                content: document.getElementById('content').value,
+                tags: rawTags
+            })
+        });
+
+        if (res.ok) {
+            document.getElementById('newPostForm').reset();
+            loadMyPosts();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || 'Ошибка создания поста');
+        }
+    });
+
+    loadMyPosts();
+</script>
+</body>
+</html>

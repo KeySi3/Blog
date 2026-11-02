@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blob</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f9fafb; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .nav-links a { margin-left: 15px; text-decoration: none; color: #2563eb; font-weight: 500; }
+        .filters { display: flex; gap: 10px; margin-bottom: 20px; }
+        .filters input { flex: 1; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; }
+        .filters button { padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .post-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer; transition: transform 0.1s; }
+        .post-card:hover { transform: translateY(-2px); }
+        .post-title { margin-top: 0; color: #1f2937; }
+        .post-meta { font-size: 13px; color: #6b7280; margin-bottom: 10px; }
+        .tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .tag-badge { background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .load-more-btn { display: block; width: 100%; padding: 12px; background: #e5e7eb; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; margin-top: 20px; }
+        .load-more-btn:hover { background: #d1d5db; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h2>Blob</h2>
+        <div id="authNav" class="nav-links"></div>
+    </header>
+
+    <div class="filters">
+        <input type="text" id="searchInput" placeholder="Поиск по названию поста...">
+        <input type="text" id="tagInput" style="max-width: 200px;" placeholder="Фильтр по тегу...">
+        <button onclick="applyFilters()">Найти</button>
+    </div>
+
+    <div id="postsList"></div>
+    <button id="loadMoreBtn" class="load-more-btn" onclick="loadPosts()">Загрузить еще 10 постов</button>
+</div>
+
+<script>
+    let currentSkip = 0;
+    const limit = 10;
+    const authData = JSON.parse(localStorage.getItem('blog_user') || 'null');
+
+    // Настройка навигации в зависимости от статуса авторизации
+    const authNav = document.getElementById('authNav');
+    if (authData) {
+        authNav.innerHTML = `
+            <span>Привет, <b>${authData.username}</b></span>
+            <a href="/profile">Мой профиль</a>
+            <a href="#" onclick="logout()">Выйти</a>
+        `;
+    } else {
+        authNav.innerHTML = `<a href="/login">Войти</a> | <a href="/register">Регистрация</a>`;
+    }
+
+    function logout() {
+        localStorage.removeItem('blog_user');
+        window.location.reload();
+    }
+
+    async function fetchPosts(skip, reset = false) {
+        const q = document.getElementById('searchInput').value;
+        const tag = document.getElementById('tagInput').value;
+
+        let url = `/api/posts?skip=${skip}&limit=${limit}`;
+        if (q) url += `&q=${encodeURIComponent(q)}`;
+        if (tag) url += `&tag=${encodeURIComponent(tag)}`;
+
+        const res = await fetch(url);
+        const posts = await res.json();
+
+        const container = document.getElementById('postsList');
+        if (reset) container.innerHTML = '';
+
+        if (posts.length < limit) {
+            document.getElementById('loadMoreBtn').style.display = 'none';
+        } else {
+            document.getElementById('loadMoreBtn').style.display = 'block';
+        }
+
+        posts.forEach(post => {
+            const card = document.createElement('div');
+            card.className = 'post-card';
+            card.onclick = (e) => {
+                if (!e.target.classList.contains('tag-badge')) {
+                    window.location.href = `/posts/view/${post.id}`;
+                }
+            };
+
+            const tagsHtml = (post.tags || []).map(t => `<span class="tag-badge" onclick="filterByTag('${t}')">#${t}</span>`).join('');
+            const dateStr = new Date(post.created_at).toLocaleString();
+
+            card.innerHTML = `
+                <h3 class="post-title">${post.title}</h3>
+                <div class="post-meta">Автор: <b>${post.author_username}</b> | ${dateStr} | Комментариев: ${post.comments ? post.comments.length : 0}</div>
+                <p>${post.content.length > 200 ? post.content.substring(0, 200) + '...' : post.content}</p>
+                <div class="tags">${tagsHtml}</div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function loadPosts() {
+        fetchPosts(currentSkip, false);
+        currentSkip += limit;
+    }
+
+    function applyFilters() {
+        currentSkip = 0;
+        fetchPosts(0, true);
+        currentSkip = limit;
+    }
+
+    function filterByTag(tag) {
+        document.getElementById('tagInput').value = tag;
+        applyFilters();
+    }
+
+    // Первоначальная загрузка первых 10 постов
+    loadPosts();
+</script>
+
+</body>
+</html>

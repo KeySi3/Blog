@@ -1,0 +1,47 @@
+services:
+  # 1. Контейнер СУБД MongoDB
+  mongo:
+    image: mongo:7.0
+    container_name: blog_mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # 2. Контейнер основного блога
+  blog_service:
+    build:
+      context: ./blog_service
+    container_name: blog_fastapi
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_NAME=blog_db
+    volumes:
+      - ./blog_service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - mongo
+
+  # 3. Контейнер сервиса отчетов и аналитики
+  reporting_service:
+    build:
+      context: ./reporting_service
+    container_name: reporting_fastapi
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_NAME=blog_db
+    volumes:
+      - ./reporting_service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:
