@@ -6,7 +6,7 @@ from models import UserRegister, UserResponse, PostCreate, PostResponse, Comment
     PostUpdate, PostDelete
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from auth_utils import hash_password, verify_password
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -69,7 +69,7 @@ async def register(
     user_doc = {
         "username": user_data.username,
         "password_hash": hash_password(user_data.password),
-        "created_at": datetime.now(timezone.utc)
+        "created_at": datetime.utcnow() + timedelta(hours=3)
     }
 
     result = await db["users"].insert_one(user_doc)
@@ -146,7 +146,7 @@ async def create_post(post_data: PostCreate, db: AsyncIOMotorDatabase = Depends(
         "tags": cleaned_tags,
         "author_username": user["username"],
         "author_id": str(user["_id"]),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.utcnow() + timedelta(hours=3),
         "comments": [],
         "updated_at": None
     }
@@ -173,7 +173,7 @@ async def add_comment(
         "id": str(uuid.uuid4()),
         "author_username": user["username"],
         "text": comment_data.text,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.utcnow() + timedelta(hours=3),
         "updated_at": None
     }
 
@@ -207,7 +207,7 @@ async def update_comment(
     if not user or not verify_password(comment_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow() + timedelta(hours=3)
 
     update_result = await db["posts"].update_one(
         {
@@ -275,7 +275,7 @@ async def update_post(
                 "title": post_data.title,
                 "content": post_data.content,
                 "tags": cleaned_tags,
-                "updated_at": datetime.now(timezone.utc)
+                "updated_at": datetime.utcnow() + timedelta(hours=3)
             }
         }
     )
