@@ -1,20 +1,18 @@
 services:
-  # 1. Контейнер СУБД MongoDB
+  # Контейнер СУБД MongoDB
   mongo:
     image: mongo:7.0
     container_name: blog_mongodb
-    restart: always
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
 
-  # 2. Контейнер основного блога
+  # Контейнер основного блога
   blog_service:
     build:
       context: ./blog_service
     container_name: blog_fastapi
-    restart: always
     ports:
       - "8000:8000"
     environment:
@@ -26,12 +24,11 @@ services:
     depends_on:
       - mongo
 
-  # 3. Контейнер сервиса отчетов и аналитики
+  # Контейнер сервиса отчетов
   reporting_service:
     build:
       context: ./reporting_service
     container_name: reporting_fastapi
-    restart: always
     ports:
       - "8001:8001"
     environment:
