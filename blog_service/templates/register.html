@@ -119,12 +119,11 @@
             const data = await response.json();
 
             if (response.ok) {
-                // Сохраняем имя и пароль для действий в блоге
                 localStorage.setItem('blog_user', JSON.stringify({
                     username: payload.username,
                     password: payload.password
                 }));
-                window.location.href = '/'; // переход на главную
+                window.location.href = '/';
             } else {
                 msgBox.className = 'message error';
                 msgBox.textContent = data.detail || 'Ошибка регистрации';

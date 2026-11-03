@@ -6,21 +6,22 @@ from models import UserRegister, UserResponse, PostCreate, PostResponse, Comment
     PostUpdate, PostDelete
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from auth_utils import hash_password, verify_password
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, List
 from bson import ObjectId
 from bson.errors import InvalidId
 import uuid
 
+# Инициализация приложения с передачей lifespan для инициализации подключения к MongoDB при старте
 app = FastAPI(lifespan=lifespan)
+# Настройка Jinja2 для рендеринга HTML-шаблонов
 templates = Jinja2Templates(directory="templates")
 
-@app.get(
-    "/register",
-    response_class=HTMLResponse,
-    summary="Страница регистрации"
-)
+
+# Эндпоинты для рендеринга HTML
+@app.get("/register", response_class=HTMLResponse, summary="Страница регистрации")
 async def register_page(request: Request):
+    """Отображает HTML-форму регистрации нового пользователя."""
     return templates.TemplateResponse(
         request=request,
         name="register.html"
@@ -29,22 +30,30 @@ async def register_page(request: Request):
 
 @app.get("/login", response_class=HTMLResponse, summary="Страница авторизации")
 async def login_page(request: Request):
+    """Отображает HTML-форму авторизации."""
     return templates.TemplateResponse(request=request, name="login.html")
 
 
 @app.get("/", response_class=HTMLResponse, summary="Главная страница")
 async def index_page(request: Request):
+    """Отображает HTML-форму ленты публикаций."""
     return templates.TemplateResponse(request=request, name="index.html")
 
 
 @app.get("/posts/view/{post_id}", response_class=HTMLResponse, summary="Страница поста с комментариями")
 async def post_detail_page(request: Request, post_id: str):
+    """
+    Отображает страницу конкретного поста.
+    Передает post_id в контекст шаблона для дальнейшей загрузки данных через JS.
+    """
     return templates.TemplateResponse(request=request, name="post_detail.html", context={"post_id": post_id})
 
 
 @app.get("/profile", response_class=HTMLResponse, summary="Личная страница автора")
 async def profile_page(request: Request):
+    """Отображает кабинет пользователя со списком его собственных публикаций."""
     return templates.TemplateResponse(request=request, name="profile.html")
+
 
 @app.post(
     "/auth/register",
@@ -52,20 +61,16 @@ async def profile_page(request: Request):
     status_code=status.HTTP_201_CREATED,
     summary="Регистрация пользователя"
 )
-async def register(
-    user_data: UserRegister,
-    db: AsyncIOMotorDatabase = Depends(get_db)
-):
-    existing_user = await db["users"].find_one({
-        "username": user_data.username
-    })
-
+async def register(user_data: UserRegister, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Регистрация нового пользователя"""
+    # Проверка существования пользователя с аналогичным username
+    existing_user = await db["users"].find_one({"username": user_data.username})
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Пользователь с таким логином уже существует"
         )
-
+    # Сформировать документ для вставки в БД
     user_doc = {
         "username": user_data.username,
         "password_hash": hash_password(user_data.password),
@@ -78,10 +83,9 @@ async def register(
 
 
 @app.post("/auth/login", response_model=UserResponse, summary="Проверка логина и пароля")
-async def login(
-    credentials: UserRegister,
-    db: AsyncIOMotorDatabase = Depends(get_db)
-):
+async def login(credentials: UserRegister, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Аутентификация пользователя"""
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": credentials.username})
 
     if not user or not verify_password(credentials.password, user["password_hash"]):
@@ -95,13 +99,19 @@ async def login(
 
 @app.get("/api/posts", response_model=List[PostResponse], summary="Получение списка постов для отображения на главной странице")
 async def list_posts(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, le=50),
-    q: Optional[str] = None,
-    tag: Optional[str] = None,
-    author: Optional[str] = None,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        skip: int = Query(0, ge=0),
+        limit: int = Query(10, le=50),
+        q: Optional[str] = None,
+        tag: Optional[str] = None,
+        author: Optional[str] = None,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """
+    Возвращает список публикаций с фильтрами:
+    - q: поиск подстроки в заголовке без учета регистра
+    - tag: поиск по совпадению элемента в массиве tags
+    - author: фильтр по имени автора
+    """
     filter_query = {}
     # Поиск по заголовку
     if q:
@@ -115,12 +125,14 @@ async def list_posts(
     if author:
         filter_query["author_username"] = author.strip()
 
+    # Сортировка по убыванию даты создания поста для отображения новых постов первыми
     cursor = db["posts"].find(filter_query).sort("created_at", -1).skip(skip).limit(limit)
     return await cursor.to_list(length=limit)
 
 
 @app.get("/api/posts/{post_id}", response_model=PostResponse, summary="Получение одного поста")
 async def get_single_post(post_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Возвращает информацию о конкретном посте"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
@@ -134,6 +146,8 @@ async def get_single_post(post_id: str, db: AsyncIOMotorDatabase = Depends(get_d
 
 @app.post("/api/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED, summary="Создание поста")
 async def create_post(post_data: PostCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Создать новый пост"""
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": post_data.username})
     if not user or not verify_password(post_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
@@ -156,15 +170,17 @@ async def create_post(post_data: PostCreate, db: AsyncIOMotorDatabase = Depends(
 
 @app.post("/api/posts/{post_id}/comments", response_model=CommentResponse, summary="Добавление комментария")
 async def add_comment(
-    post_id: str,
-    comment_data: CommentCreate,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        post_id: str,
+        comment_data: CommentCreate,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """Добавить комментарий к посту"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Некорректный ID")
 
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": comment_data.username})
     if not user or not verify_password(comment_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные для комментария")
@@ -193,16 +209,18 @@ async def add_comment(
     summary="Редактирование комментария автором"
 )
 async def update_comment(
-    post_id: str,
-    comment_id: str,
-    comment_data: CommentUpdate,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        post_id: str,
+        comment_id: str,
+        comment_data: CommentUpdate,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """Редактировать текст комментария к посту"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Некорректный ID поста")
 
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": comment_data.username})
     if not user or not verify_password(comment_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
@@ -226,7 +244,7 @@ async def update_comment(
             }
         }
     )
-
+    # Если совпадение не найдено, вернуть ошибку
     if update_result.matched_count == 0:
         existing_post = await db["posts"].find_one({"_id": oid, "comments.id": comment_id})
         if not existing_post:
@@ -246,19 +264,22 @@ async def update_comment(
     summary="Редактирование поста автором"
 )
 async def update_post(
-    post_id: str,
-    post_data: PostUpdate,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        post_id: str,
+        post_data: PostUpdate,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """Обновление поста после редактирования автором"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Некорректный ID поста")
 
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": post_data.username})
     if not user or not verify_password(post_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
+    # Проверка наличия поста в БД
     post = await db["posts"].find_one({"_id": oid})
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден")
@@ -289,19 +310,22 @@ async def update_post(
     summary="Удаление поста автором"
 )
 async def delete_post(
-    post_id: str,
-    delete_data: PostDelete,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        post_id: str,
+        delete_data: PostDelete,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """Удаление поста со всеми вложенными комментариями"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Некорректный ID поста")
 
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": delete_data.username})
     if not user or not verify_password(delete_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
+    # Проверка наличия поста в БД
     post = await db["posts"].find_one({"_id": oid})
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден")
@@ -319,20 +343,23 @@ async def delete_post(
     summary="Удаление комментария автором"
 )
 async def delete_comment(
-    post_id: str,
-    comment_id: str,
-    delete_data: PostDelete,
-    db: AsyncIOMotorDatabase = Depends(get_db)
+        post_id: str,
+        comment_id: str,
+        delete_data: PostDelete,
+        db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    """Удаление комментария автором"""
     try:
         oid = ObjectId(post_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Некорректный ID поста")
 
+    # Проверка наличия пользователя в БД и валидности переданного пароля
     user = await db["users"].find_one({"username": delete_data.username})
     if not user or not verify_password(delete_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
+    # Проверка наличия поста и комментария
     post = await db["posts"].find_one(
         {
             "_id": oid,
@@ -354,4 +381,3 @@ async def delete_comment(
     )
 
     return None
-

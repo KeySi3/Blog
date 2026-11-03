@@ -5,7 +5,10 @@ import httpx
 from fastapi.middleware.cors import CORSMiddleware
 
 
+# Инициализация приложения отчетности
 app = FastAPI(title="Reporting Service")
+
+# Настройки middleware Cross-Origin Resource Sharing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -20,6 +23,7 @@ app.add_middleware(
 
 @app.get("/api/stats", response_model=StatsResponse, summary="Получить статистику по постам и комментариям")
 async def get_stats():
+    """Агрегировать статистику блога, опрашивая основной сервис"""
     total_posts = 0
     total_comments = 0
     skip = 0
@@ -27,6 +31,7 @@ async def get_stats():
 
     async with httpx.AsyncClient(base_url=BLOG_SERVICE_URL, timeout=10.0) as client:
         while True:
+            # Запрос пачки постов
             try:
                 response = await client.get("/api/posts", params={"skip": skip, "limit": batch_size})
             except httpx.RequestError as exc:
@@ -43,11 +48,14 @@ async def get_stats():
             if not posts:
                 break
 
+            # Увеличение счетчика количества постов
             total_posts += len(posts)
             for post in posts:
                 comments = post.get("comments")
+                # Увеличение счетчика количества комментариев
                 total_comments += len(comments)
 
+            # Если пришло меньше постов, чем запрашивали, то эта пачка последняя
             if len(posts) < batch_size:
                 break
 

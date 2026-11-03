@@ -135,7 +135,6 @@
             const data = await response.json();
 
             if (response.ok) {
-                // Сохраняем имя и пароль для действий в блоге
                 localStorage.setItem('blog_user', JSON.stringify({
                     username: payload.username,
                     password: payload.password

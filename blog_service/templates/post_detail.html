@@ -74,10 +74,8 @@
 <div class="container">
     <a href="/" class="back-link">← На главную</a>
 
-    <!-- Блок просмотра статьи -->
     <div id="postContent">Загрузка...</div>
 
-    <!-- Блок редактирования статьи -->
     <div class="post-edit-box" id="postEditBox">
         <h3 style="margin-top:0;">Редактирование статьи</h3>
         <form id="postEditForm">
@@ -91,7 +89,6 @@
         </form>
     </div>
 
-    <!-- Секция комментариев -->
     <div class="comments-section">
         <h3>Комментарии</h3>
         <div id="commentsList"></div>
@@ -128,7 +125,6 @@
         const dateCreated = new Date(currentPost.created_at).toLocaleString();
         const isPostAuthor = authData && authData.username === currentPost.author_username;
 
-        // Плашка для измененного поста
         const updatedBadgeHtml = currentPost.updated_at
             ? `<span class="updated-badge" title="Последнее изменение">✎ изменено: ${new Date(currentPost.updated_at).toLocaleString()}</span>`
             : '';
@@ -162,7 +158,6 @@
         renderComments(currentPost.comments || []);
     }
 
-    // Режим редактирования поста
     function openPostEdit() {
         document.getElementById('postContent').style.display = 'none';
         document.getElementById('postEditBox').style.display = 'block';
@@ -202,7 +197,6 @@
         }
     });
 
-    // Отрисовка комментариев
     function renderComments(comments) {
         const list = document.getElementById('commentsList');
         if (comments.length === 0) {
@@ -213,12 +207,10 @@
         list.innerHTML = comments.map(c => {
             const isCommentAuthor = authData && authData.username === c.author_username;
 
-            // Плашка изменения комментария
             const commentUpdatedBadge = c.updated_at
                 ? `<span class="updated-badge-comment" title="Время редактирования">✎ ред. ${new Date(c.updated_at).toLocaleString()}</span>`
                 : '';
 
-            // Кнопки действий для автора комментария
             const actionButtons = isCommentAuthor ? `
                 <div>
                     <button class="edit-link" onclick="openEditBox('${c.id}')">Редактировать</button>
@@ -239,7 +231,6 @@
 
                     <div class="comment-text" id="text-${c.id}">${c.text}</div>
 
-                    <!-- Форма редактирования комментария -->
                     <div class="edit-box" id="edit-box-${c.id}">
                         <textarea id="edit-input-${c.id}" rows="3">${c.text}</textarea>
                         <div>
@@ -323,7 +314,7 @@
 
             if (res.status === 204 || res.ok) {
                 alert('Пост успешно удален');
-                window.location.href = '/profile'; // Перенаправляем автора обратно в профиль
+                window.location.href = '/profile';
             } else {
                 const err = await res.json().catch(() => ({}));
                 alert(err.detail || 'Не удалось удалить пост');
@@ -349,7 +340,7 @@
             });
 
             if (res.status === 204 || res.ok) {
-                loadPost(); // Перезагружаем пост и обновленный список комментариев
+                loadPost();
             } else {
                 const err = await res.json().catch(() => ({}));
                 alert(err.detail || 'Не удалось удалить комментарий');
